@@ -24,7 +24,7 @@ function ON_POST() {
 	if (SALDOC.INT01 && !SALDOC.KEPYOHANDMD) {
 		X.EXCEPTION('Ati ales sa convertiti oferta la aprobare\ndar nu ati indicat documentul in care se va converti.');
 	}
-	
+
 	if (SALDOC.INT01 && SALDOC.KEPYOHANDMD) {
 		X.WARNING('Oferta va fi convertita automat dupa aprobarea ofertei.');
 	}
@@ -657,7 +657,9 @@ function backgroundConv() {
 
 					//actualizeaza stocul per depozit
 					var zz = calculStocDepozit(ITELINES.MTRL, ITELINES.WHOUSE);
-					addCurrentLineToTbls(l, lp, zz);
+					//debugger;
+					var qtyDisponibila = addCurrentLineToTbls(l, lp, zz);
+					areTaxe(l, lp, qtyDisponibila);
 				}
 
 				ITELINES.NEXT;
@@ -795,36 +797,39 @@ function recordProgress(id, convSuccesfully, convUnsucc) {
 	}
 }
 
-function areTaxe(l, lp) {
+function areTaxe(l, lp, qtyDisponibila) {
 	//daca mtrl are taxa eco sau core (ITEEXTRA.NUM01 sau ITEM.RELITEM), localizeaza-l si split it toolbar
 	var eco = X.SQL('select isnull(num01, 0) exo from mtrextra where mtrl=' + ITELINES.MTRL, null),
 	core = X.SQL('select isnull(relitem, 0) core from mtrl where mtrl=' + ITELINES.MTRL, null);
-	if (eco) {
-		addTaxa(eco);
+	if (eco > 0) {
+		addTaxa(eco, l, lp, qtyDisponibila);
 	}
 
-	if (core) {
-		addTaxa(core);
+	if (core > 0) {
+		addTaxa(core, l, lp, qtyDisponibila);
 	}
 }
 
-function addTaxa(taxa) {
+function addTaxa(taxa, l, lp, qtyDisponibila) {
 	var zz = calculStocDepozit(ITELINES.MTRL, ITELINES.WHOUSE),
 	wh = ITELINES.WHOUSE;
-	if (ITELINES.LOCATE('MTRL;WHOUSE', eco, wh) == 1) {
-		addCurrentLineToTbls(l, lp, zz);
+	if (ITELINES.LOCATE('MTRL;WHOUSE', taxa, wh) == 1) {
+		addCurrentLineToTbls(l, lp, qtyDisponibila);
 	}
 }
 
 function addCurrentLineToTbls(l, lp, zz) {
 	//debugger;
-	if (zz) {
+	var qtyDisponibila = 0,
+	ret = 0;
+	if (zz > 0) {
 		addFirst(l);
 
 		if (ITELINES.QTY1) {
 			if (ITELINES.QTY1 > zz) {
 				//cat e disponibil ajunge pe doc principal, restul pe precomanda
 				l.QTY1 = zz;
+				qtyDisponibila = l.QTY1;
 
 				addFirst(lp);
 
@@ -835,6 +840,7 @@ function addCurrentLineToTbls(l, lp, zz) {
 				lp.POST;
 			} else {
 				l.QTY1 = ITELINES.QTY1;
+				qtyDisponibila = l.QTY1;
 			}
 		}
 
@@ -847,11 +853,14 @@ function addCurrentLineToTbls(l, lp, zz) {
 		addFirst(lp);
 
 		lp.QTY1 = ITELINES.QTY1;
+		qtyDisponibila = 0;
 
 		addTheRest(lp);
 
 		lp.POST;
 	}
+
+	return qtyDisponibila;
 }
 
 function addFirst(tbl) {
@@ -1528,9 +1537,9 @@ function ON_LOCATE() {
 		}
 	} else if (SALDOC.INT01 && getFullyTr() == 0 && q1c == 0) {
 		//se executa ON_AFTERPOST in CCCAPROBOFERTA, asta inseamna ca am o aprobare pe findoc-ul acestei oferte
-		var aprob = areAprobare(SALDOC.FINDOC, SALDOC.TRDR);			
+		var aprob = areAprobare(SALDOC.FINDOC, SALDOC.TRDR);
 		if (aprob) {
-			if (!X.SQL('select isnull(itsme, 0) from cccaproboferta where cccaproboferta='+aprob, null)) {
+			if (!X.SQL('select isnull(itsme, 0) from cccaproboferta where cccaproboferta=' + aprob, null)) {
 				X.WARNING('Oferta a fost aprobata dar nu si convertita.\nCoversia se va produce acum.\n');
 			}
 			backgroundConv();
